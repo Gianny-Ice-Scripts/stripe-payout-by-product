@@ -1,9 +1,9 @@
-const stripe = require("stripe")("sk_live_xxx"); //available in LastPass
 const readline = require("readline");
 const Table = require("cli-table");
+let stripe = null; // Stripe will be initialized later with the API key
 
 // Function to convert month and year input (e.g., 'MM-YYYY') to start and end Unix timestamps
-function getMonthTtimestamps(monthYearString) {
+function getMonthTimestamps(monthYearString) {
   const [month, year] = monthYearString.split("-");
   const startDate = new Date(`${year}-${month}-01T00:00:00`);
 
@@ -250,40 +250,46 @@ function formatMonthYear(timestamp) {
   }).format(date);
 }
 
-// Function to display pending invoice items in a table with totals and net amounts
+// Function to estimate Stripe processing fees
+function estimateStripeFees(amount) {
+  const percentageFee = 0.029; // 2.9% fee
+  const fixedFee = 0.3; // $0.30 fixed fee
+  return amount * percentageFee + fixedFee;
+}
+
+// Function to display pending invoice items with estimated fees
 function displayPendingInvoiceItems(records) {
   const table = new Table({
-    head: ["Customer", "Product", "Invoice Date", "Amount", "Fees", "Net"],
-    colWidths: [20, 20, 20, 10, 10, 10],
+    head: ["Customer", "Invoice Date", "Amount", "Estimated Fees", "Net"],
+    colWidths: [20, 20, 15, 20, 15],
   });
 
   let totalAmount = 0;
-  let totalProcessingFees = 0;
+  let totalEstimatedFees = 0;
   let totalNet = 0;
 
   records.forEach((record) => {
-    const netAmount = record.amount - record.processing_fee;
+    const estimatedFees = estimateStripeFees(record.amount);
+    const netAmount = record.amount - estimatedFees;
     totalAmount += record.amount;
-    totalProcessingFees += record.processing_fee;
+    totalEstimatedFees += estimatedFees;
     totalNet += netAmount;
 
     table.push([
       record.customer_id,
-      record.product_id,
-      formatDate(record.pending_invoice_date), // Format the date for better readability
+      formatDate(record.pending_invoice_date),
       `$${record.amount.toFixed(2)}`,
-      `$${record.processing_fee.toFixed(2)}`,
+      `$${estimatedFees.toFixed(2)}`, // Display estimated fees
       `$${netAmount.toFixed(2)}`, // Display net amount
     ]);
   });
 
-  // Add a final row for the totals
+  // Add a final row for totals
   table.push([
     "Total",
     "",
-    "",
     `$${totalAmount.toFixed(2)}`,
-    `$${totalProcessingFees.toFixed(2)}`,
+    `$${totalEstimatedFees.toFixed(2)}`, // Display total estimated fees
     `$${totalNet.toFixed(2)}`, // Display total net amount
   ]);
 
@@ -293,8 +299,8 @@ function displayPendingInvoiceItems(records) {
 // Function to display charges in a table with totals and net amounts
 function displayCharges(records) {
   const table = new Table({
-    head: ["Customer", "Product", "Invoice Date", "Amount", "Fees", "Net"],
-    colWidths: [20, 20, 20, 10, 10, 10],
+    head: ["Customer", "Invoice Date", "Amount", "Fees", "Net"],
+    colWidths: [20, 20, 15, 20, 15],
   });
 
   let totalAmount = 0;
@@ -309,7 +315,6 @@ function displayCharges(records) {
 
     table.push([
       record.customer_id,
-      record.product_id,
       formatDate(record.invoice_date), // Format the date for better readability
       `$${record.amount.toFixed(2)}`,
       `$${record.processing_fee.toFixed(2)}`,
@@ -321,7 +326,6 @@ function displayCharges(records) {
   table.push([
     "Total",
     "",
-    "",
     `$${totalAmount.toFixed(2)}`,
     `$${totalProcessingFees.toFixed(2)}`,
     `$${totalNet.toFixed(2)}`, // Display total net amount
@@ -332,7 +336,12 @@ function displayCharges(records) {
 
 async function getProductRevenueAndFees() {
   try {
-    const productIdToFilter = "prod_OJ3371sGJsUPcb"; // The product ID you want to filter by
+    // Prompt user for the API key and product ID
+    const stripeApiKey = await askQuestion("Enter your Stripe API key: ");
+    const productIdToFilter = await askQuestion("Enter the product ID: ");
+
+    // Initialize Stripe with the provided API key
+    stripe = require("stripe")(stripeApiKey);
 
     // Prompt user for month and year
     const monthYear = await askQuestion(
@@ -346,7 +355,7 @@ async function getProductRevenueAndFees() {
       endTimestamp,
       startDateFormatted,
       endDateFormatted,
-    } = getMonthTtimestamps(monthYear);
+    } = getMonthTimestamps(monthYear);
 
     // Format the month year based on start timestamp
     const formattedMonthYear = formatMonthYear(startTimestamp);
