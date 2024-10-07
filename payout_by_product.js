@@ -1,4 +1,4 @@
-const stripe = require("stripe")("sk_live_xxx");
+const stripe = require("stripe")("sk_live_xxx"); //available in LastPass
 const readline = require("readline");
 const Table = require("cli-table");
 
