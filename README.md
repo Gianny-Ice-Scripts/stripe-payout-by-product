@@ -24,14 +24,7 @@ The script will prompt you for the Stripe API Key and the Product ID.
    npm install
    ```
 
-3. **Retrieve API Key**  
-   Obtain the API key from LastPass entry **AFFL Stripe API Key**:
-
-   ```bash
-   export STRIPE_API_KEY=your_api_key_here
-   ```
-
-4. **Run the Script**  
+3. **Run the Script**  
    Run the script:
 
    ```bash
